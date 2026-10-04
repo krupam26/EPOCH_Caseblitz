@@ -113,7 +113,7 @@ def _quality_flag(frame):
     if brightness < 35:
         return "dark"
 
-    if blur_score < 80:
+    if blur_score < 30:
         return "blurry"
 
     return None
@@ -248,6 +248,14 @@ def _to_postprocess_result(
 def _normalize_result(result):
     """Accept both legacy FAISS tuples and enriched ML result dictionaries."""
     if isinstance(result, dict):
+        if not result.get("video_path") and result.get("clip_id"):
+            with get_conn() as connection:
+                row = connection.execute(
+                    "SELECT c.video_path FROM clips c WHERE c.clip_id=? LIMIT 1",
+                    (result["clip_id"],),
+                ).fetchone()
+                if row:
+                    result["video_path"] = row["video_path"]
         return result
 
     if isinstance(result, (tuple, list)) and len(result) >= 2:
@@ -279,6 +287,7 @@ def _normalize_result(result):
 
 def _to_result(
     result: dict[str, Any],
+    percent: int = None,
 ):
     """Convert an ML result into SearchResult."""
 
@@ -320,13 +329,17 @@ def _to_result(
         f"/videos/{clip_id}"
     )
 
+    final_percent = (
+        int(percent)
+        if percent is not None
+        else _similarity_to_percent(similarity)
+    )
+
     return SearchResult(
         clip_id=clip_id,
         start=start,
         end=end,
-        percent=_similarity_to_percent(
-            similarity
-        ),
+        percent=final_percent,
         caption=_caption_result(
             frame
         ),
@@ -363,9 +376,10 @@ def search_clips(
         if search_fn is None:
             search_fn = ml_search
 
+        from .config import RAW_K
         raw_results = search_fn(
             query,
-            k,
+            RAW_K,
         )
 
     except FileNotFoundError:
@@ -395,6 +409,7 @@ def search_clips(
         raw_result = processed_result.get(
             "_raw"
         )
+        pct = processed_result.get("percent")
 
         if raw_result is None:
             raw_result = {
@@ -417,7 +432,8 @@ def search_clips(
 
         converted.append(
             _to_result(
-                raw_result
+                raw_result,
+                percent=pct,
             )
         )
 

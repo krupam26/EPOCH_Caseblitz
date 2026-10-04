@@ -9,6 +9,7 @@ import cv2
 from ml.indexing import unique_video_paths
 from ml.segment_builder import build_segments
 from ml.video_processor import assess_frame_quality, extract_video_frames
+from ml.frame_extractor import enhance_if_blurry
 
 
 class ComponentTests(TestCase):
@@ -46,3 +47,15 @@ class ComponentTests(TestCase):
         frame = np.repeat(blurred[:, :, None], 3, axis=2)
         quality = assess_frame_quality(frame, blur_threshold=35.0)
         self.assertIn("blurry", quality["issues"])
+
+    def test_blurry_frame_is_enhanced_for_context(self):
+        textured = np.zeros((64, 64), dtype=np.uint8)
+        textured[:, 32:] = 255
+        blurred = cv2.GaussianBlur(textured, (15, 15), 0)
+        frame_rgb = np.repeat(blurred[:, :, None], 3, axis=2)
+        enhanced, was_blurry, blur_score = enhance_if_blurry(frame_rgb, blur_threshold=50.0)
+        self.assertTrue(was_blurry)
+        self.assertEqual(enhanced.shape, frame_rgb.shape)
+        enhanced_gray = cv2.cvtColor(enhanced, cv2.COLOR_RGB2GRAY)
+        orig_gray = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2GRAY)
+        self.assertGreater(cv2.Laplacian(enhanced_gray, cv2.CV_64F).var(), cv2.Laplacian(orig_gray, cv2.CV_64F).var())

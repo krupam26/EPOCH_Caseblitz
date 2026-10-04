@@ -11,9 +11,9 @@ MAX_CLIPS = 50
 MAX_CLIP_SECONDS = 60
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm"}
 
-# Search post-processing (recalibrate in H4/H7 with Krups)
-MIN_SCORE, MAX_SCORE = 0.15, 0.35
-PERCENT_THRESHOLD = 35
+# Search post-processing (calibrated for open_clip ViT-B-32)
+MIN_SCORE, MAX_SCORE = 0.12, 0.30
+PERCENT_THRESHOLD = 25
 MAX_SEGMENTS_PER_CLIP = 2
 MIN_WORDS = 3
 MAX_SENTENCES = 20

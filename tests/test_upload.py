@@ -39,3 +39,29 @@ def test_bad_zip(tmp_path):
     p.write_bytes(b"nope")
     with pytest.raises(UploadError):
         upload.process_upload(p)
+
+
+def test_video_longer_than_60s(tmp_path, monkeypatch):
+    # Mock probe_video or test duration guard
+    make_video(tmp_path / "long.mp4", seconds=2, fps=10)
+    zp = tmp_path / "long.zip"
+    with zipfile.ZipFile(zp, "w") as z:
+        z.write(tmp_path / "long.mp4", "long.mp4")
+
+    # Simulate video duration probe returning 65.0s
+    monkeypatch.setattr(upload, "probe_video", lambda p: (_ for _ in ()).throw(ValueError("Clip duration (65.0s) exceeds maximum limit of 60s")))
+    res = upload.process_upload(zp)
+    assert "long.mp4" in res.skipped
+    assert res.clips_indexed == 0
+
+
+def test_zip_larger_than_500mb(tmp_path, monkeypatch):
+    p = tmp_path / "huge.zip"
+    p.write_bytes(b"dummy")
+    # Simulate stat size exceeding MAX_ZIP_BYTES
+    from unittest.mock import MagicMock
+    mock_stat = MagicMock()
+    mock_stat.st_size = 501 * 1024 * 1024
+    monkeypatch.setattr(Path, "stat", lambda self: mock_stat)
+    with pytest.raises(UploadError, match="larger than 500 MB"):
+        upload.process_upload(p)

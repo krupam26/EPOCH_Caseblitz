@@ -67,9 +67,12 @@ def probe_video(
                 "cannot decode video frames"
             )
 
-        return float(
-            frames / fps
-        )
+        duration = float(frames / fps)
+        if duration > MAX_CLIP_SECONDS:
+            raise ValueError(
+                f"Clip duration ({duration:.1f}s) exceeds maximum limit of {MAX_CLIP_SECONDS}s"
+            )
+        return duration
 
     finally:
         cap.release()

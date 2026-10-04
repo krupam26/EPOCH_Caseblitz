@@ -1,4 +1,4 @@
-﻿"""Saved-index semantic search for text and scripts."""
+"""Saved-index semantic search for text and scripts."""
 import re
 from ml.embedding import encode_search_text
 from ml.ranking import rank_results
@@ -46,11 +46,14 @@ def search_videos(
         return []
 
     query_vector = encode_search_text(query.strip(), model=model)
-    scores, ids = index.search(query_vector.reshape(1, -1), index.ntotal)
     activity = _extract_activity(query)
-    if activity:
+    if activity and activity.lower() != query.strip().lower():
+        import numpy as np
         activity_vector = encode_search_text(activity, model=model)
-        scores, ids = index.search(activity_vector.reshape(1, -1), index.ntotal)
+        blended = 0.82 * query_vector + 0.18 * activity_vector
+        query_vector = blended / (np.linalg.norm(blended) + 1e-12)
+
+    scores, ids = index.search(query_vector.reshape(1, -1), index.ntotal)
     metadata = {
         row["faiss_id"]: row for row in get_all_segment_metadata()
     }

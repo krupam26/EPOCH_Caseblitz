@@ -23,7 +23,10 @@ def _get_models():
         index_dir = INDEX_PATH.parent
         metadata_path = index_dir / "metadata.npy"
         if INDEX_PATH.exists() and metadata_path.exists():
-            _store.load(str(index_dir))
+            try:
+                _store.load(str(index_dir))
+            except Exception:
+                _store = VectorStore()
     return _clip, _store
 
 
@@ -44,7 +47,13 @@ def embed_video(path: Path, clip_id: str) -> List[dict]:
     output = []
     for segment in segments:
         faiss_pos = store.index.ntotal
-        store.add(segment["embedding"], {"clip_id": clip_id})
+        meta = {
+            "clip_id": clip_id,
+            "start": float(segment["start_time"]),
+            "end": float(segment["end_time"]),
+            "video_path": str(path),
+        }
+        store.add(segment["embedding"], meta)
         output.append({
             "start": float(segment["start_time"]),
             "end": float(segment["end_time"]),
@@ -56,10 +65,32 @@ def embed_video(path: Path, clip_id: str) -> List[dict]:
     return output
 
 
-def search(query: str, k: int) -> List[Tuple[int, float]]:
-    """Return FAISS positions and cosine scores for the backend postprocessor."""
+def search(query: str, k: int) -> List[dict]:
+    """Return enriched FAISS search hits with cosine similarity."""
     clip, store = _get_models()
     if store.index.ntotal == 0:
         return []
-    hits = store.search(clip.encode_text(query), top_k=k)
-    return [(int(hit["faiss_id"]), float(hit["similarity"])) for hit in hits]
+
+    from ml.embedding import encode_search_text
+    query_vector = encode_search_text(query.strip(), model=clip)
+    hits = store.search(query_vector, top_k=k)
+
+    results = []
+    for hit in hits:
+        pos = int(hit["faiss_id"])
+        sim = float(hit["similarity"])
+        meta = {}
+        if 0 <= pos < len(store.metadata):
+            m = store.metadata[pos]
+            if isinstance(m, dict):
+                meta = m
+
+        results.append({
+            "faiss_pos": pos,
+            "clip_id": meta.get("clip_id", ""),
+            "start_time": meta.get("start", 0.0),
+            "end_time": meta.get("end", 0.0),
+            "video_path": meta.get("video_path", ""),
+            "similarity": sim,
+        })
+    return results
